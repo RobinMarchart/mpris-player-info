@@ -1,5 +1,5 @@
 [package]
-name = "mpris-helper-state-server"
+name = "mpris-player-info"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,8 +7,14 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.64"
+serde = { version = "1.0.160", features = ["derive"] }
 tokio = { version = "1.21.0", features = ["rt"] }
 zbus = { version = "3.1.0", default-features = false, features = ["tokio"] }
 
 [profile.release]
 lto = true
+
+[features]
+default = ["hide","playerctld"]
+hide = []
+playerctld = []

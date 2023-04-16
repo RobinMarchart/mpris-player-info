@@ -1,13 +1,6 @@
-use zbus::{dbus_proxy, Connection};
+use zbus::Connection;
 
-#[dbus_proxy(
-    default_service = "com.github.robinmarchart.mprisutils",
-    interface = "com.github.robinmarchart.mprisutils",
-    default_path = "/com/github/robinmarchart/mprisutils"
-)]
-trait Server {
-    fn toggle(&self) -> zbus::Result<bool>;
-}
+use mpris_player_info::proxies::StateServerProxy;
 
 fn main() -> anyhow::Result<()> {
     tokio::runtime::Builder::new_current_thread()
@@ -15,7 +8,7 @@ fn main() -> anyhow::Result<()> {
         .build()?
         .block_on(async {
             let conn = Connection::session().await?;
-            let proxy = ServerProxy::new(&conn).await?;
+            let proxy = StateServerProxy::new(&conn).await?;
             proxy.toggle().await?;
             Ok(())
         })
