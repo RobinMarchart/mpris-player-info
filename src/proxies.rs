@@ -1,31 +1,85 @@
+#[cfg(feature = "mpris_proxy")]
+use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "hide_server")]
+use tracing::{info,warn};
+#[cfg(any(
+    feature = "hide_proxy",
+    feature = "playerctld_proxy",
+    feature = "mpris_proxy"
+))]
+use zbus::{dbus_proxy, Result};
+
+#[cfg(feature = "mpris_proxy")]
+use zbus::zvariant::{ObjectPath, OwnedValue, Str, Type, Value};
+
+#[cfg(feature = "mpris_proxy")]
 use std::{collections::HashMap, ops::Deref};
 
-use serde::{Deserialize, Serialize};
-use zbus::{
-    dbus_proxy,
-    zvariant::{ObjectPath, OwnedValue, Type, Value, Str},
-    Result,
-};
+#[cfg(feature = "hide_server")]
+use zbus::{dbus_interface, SignalContext};
 
-#[cfg(feature = "hide")]
+#[cfg(feature = "hide_server")]
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+
+#[cfg(feature = "hide_proxy")]
 #[dbus_proxy(
     default_service = "com.github.robinmarchart.mprisutils",
     interface = "com.github.robinmarchart.mprisutils",
     default_path = "/com/github/robinmarchart/mprisutils"
 )]
-pub trait StateServer {
+pub trait HideState {
     fn toggle(&self) -> Result<bool>;
     #[dbus_proxy(property)]
-    fn suppressed(&self) -> Result<bool>;
+    fn hidden(&self) -> Result<bool>;
     #[dbus_proxy(property)]
-    fn set_suppressed(&self, val: bool) -> Result<()>;
+    fn set_hidden(&self, val: bool) -> Result<()>;
 }
 
-#[cfg(feature = "playerctld")]
+#[cfg(feature = "hide_server")]
+pub struct HideServer {
+    hidden: AtomicBool,
+}
+
+#[cfg(feature = "hide_server")]
+impl HideServer {
+    pub fn new(state: bool) -> Self {
+        Self {
+            hidden: AtomicBool::new(state),
+        }
+    }
+}
+
+#[cfg(feature = "hide_server")]
+#[dbus_interface(name = "com.github.robinmarchart.mprisutils")]
+impl HideServer {
+    #[dbus_interface(property)]
+    fn hidden(&self) -> bool {
+        self.hidden.load(Relaxed)
+    }
+
+    #[dbus_interface(property)]
+    fn set_hidden(&self, new: bool) {
+        self.hidden.store(new, Relaxed)
+    }
+
+    async fn toggle(&self, #[zbus(signal_context)] ctxt: SignalContext<'_>) -> bool {
+        let res = self.hidden.fetch_xor(true, Relaxed);
+        info!("changed hidden state to {res}");
+        self.hidden_changed(&ctxt)
+            .await
+            .err()
+            .into_iter()
+            .for_each(|e| warn!("{}", e));
+        res
+    }
+}
+
+#[cfg(feature = "playerctld_proxy")]
 #[dbus_proxy(
     interface = "com.github.altdesktop.playerctld",
-    default_service = "org.mpris.MediaPlayer2",
-    default_path = "org/mpris/MediaPlayer2"
+    default_service = "org.mpris.MediaPlayer2.playerctld",
+    default_path = "/org/mpris/MediaPlayer2"
 )]
 pub trait Playerctld {
     /// Shift method
@@ -47,7 +101,8 @@ pub trait Playerctld {
     fn player_names(&self) -> Result<Vec<String>>;
 }
 
-#[derive(Deserialize, Serialize, Type, PartialEq, Debug,Clone, Copy)]
+#[cfg(feature = "mpris_proxy")]
+#[derive(Deserialize, Serialize, Type, PartialEq, Debug, Clone, Copy)]
 #[zvariant(signature = "s")]
 pub enum LoopStatus {
     None,
@@ -55,27 +110,34 @@ pub enum LoopStatus {
     Playlist,
 }
 
+#[cfg(feature = "mpris_proxy")]
 impl<'a> TryFrom<&'a Value<'a>> for LoopStatus {
-    type Error=zbus::zvariant::Error;
+    type Error = zbus::zvariant::Error;
     fn try_from(value: &'a Value<'a>) -> std::result::Result<Self, Self::Error> {
-        Ok(match <&str as TryFrom<&'a Value<'a>>>::try_from(value)?{
-            "None"=>LoopStatus::None,
-            "Track"=>LoopStatus::Track,
-            "Playlist"=>LoopStatus::Playlist,
-            _=>return Err(zbus::zvariant::Error::Message("Unknown LoopStatus value".to_string()))
+        Ok(match <&str as TryFrom<&'a Value<'a>>>::try_from(value)? {
+            "None" => LoopStatus::None,
+            "Track" => LoopStatus::Track,
+            "Playlist" => LoopStatus::Playlist,
+            _ => {
+                return Err(zbus::zvariant::Error::Message(
+                    "Unknown LoopStatus value".to_string(),
+                ))
+            }
         })
     }
 }
-impl TryFrom<OwnedValue> for LoopStatus{
-    type Error=zbus::zvariant::Error;
+#[cfg(feature = "mpris_proxy")]
+impl TryFrom<OwnedValue> for LoopStatus {
+    type Error = zbus::zvariant::Error;
     fn try_from(value: OwnedValue) -> std::result::Result<Self, Self::Error> {
         LoopStatus::try_from(value.deref())
     }
 }
 
-impl<'a> From<LoopStatus> for Value<'a>{
+#[cfg(feature = "mpris_proxy")]
+impl<'a> From<LoopStatus> for Value<'a> {
     fn from(val: LoopStatus) -> Self {
-        let str=match val {
+        let str = match val {
             LoopStatus::None => "None",
             LoopStatus::Track => "Track",
             LoopStatus::Playlist => "Playlist",
@@ -84,7 +146,8 @@ impl<'a> From<LoopStatus> for Value<'a>{
     }
 }
 
-#[derive(Deserialize, Serialize, Type, PartialEq, Debug,Clone,Copy)]
+#[cfg(feature = "mpris_proxy")]
+#[derive(Deserialize, Serialize, Type, PartialEq, Debug, Clone, Copy)]
 #[zvariant(signature = "s")]
 pub enum PlaybackStatus {
     Playing,
@@ -92,26 +155,33 @@ pub enum PlaybackStatus {
     Stopped,
 }
 
-impl<'a> TryFrom<&'a Value<'a>> for PlaybackStatus{
-    type Error=zbus::zvariant::Error;
+#[cfg(feature = "mpris_proxy")]
+impl<'a> TryFrom<&'a Value<'a>> for PlaybackStatus {
+    type Error = zbus::zvariant::Error;
     fn try_from(value: &'a Value<'a>) -> std::result::Result<Self, Self::Error> {
-        Ok(match <&str as TryFrom<&'a Value<'a>>>::try_from(value)?{
-            "Playing"=>PlaybackStatus::Playing,
-            "Paused"=>PlaybackStatus::Paused,
-            "Stopped"=>PlaybackStatus::Stopped,
-            _=>return Err(zbus::zvariant::Error::Message("Unknown PlaybackStatus value".to_string()))
+        Ok(match <&str as TryFrom<&'a Value<'a>>>::try_from(value)? {
+            "Playing" => PlaybackStatus::Playing,
+            "Paused" => PlaybackStatus::Paused,
+            "Stopped" => PlaybackStatus::Stopped,
+            _ => {
+                return Err(zbus::zvariant::Error::Message(
+                    "Unknown PlaybackStatus value".to_string(),
+                ))
+            }
         })
     }
 }
 
+#[cfg(feature = "mpris_proxy")]
 impl TryFrom<OwnedValue> for PlaybackStatus {
-    type Error=zbus::zvariant::Error;
+    type Error = zbus::zvariant::Error;
     fn try_from(value: OwnedValue) -> std::result::Result<Self, Self::Error> {
         PlaybackStatus::try_from(value.deref())
     }
 }
 
-#[dbus_proxy(interface = "org.mpris.MediaPlayer2", assume_defaults = true)]
+#[cfg(feature = "mpris_proxy")]
+#[dbus_proxy(interface = "org.mpris.MediaPlayer2", default_path = "/org/mpris/MediaPlayer2", assume_defaults = true)]
 pub trait MediaPlayer2 {
     /// Quit method
     fn quit(&self) -> Result<()>;
@@ -158,7 +228,8 @@ pub trait MediaPlayer2 {
     fn supported_uri_schemes(&self) -> Result<Vec<String>>;
 }
 
-#[dbus_proxy(interface = "org.mpris.MediaPlayer2.Player", assume_defaults = true)]
+#[cfg(feature = "mpris_proxy")]
+#[dbus_proxy(interface = "org.mpris.MediaPlayer2.Player", default_path = "/org/mpris/MediaPlayer2", assume_defaults = true)]
 pub trait Player {
     /// Next method
     fn next(&self) -> Result<()>;
