@@ -1,4 +1,4 @@
-use std::future::ready;
+use std::{future::ready, sync::Arc};
 
 use crate::{
     active_player::active_players,
@@ -13,7 +13,7 @@ use zbus::{
 
 pub async fn active_player_info(
     conn: Connection,
-) -> zbus::Result<impl Stream<Item = Option<zbus::Result<(&'static str, PlayerInfo)>>>> {
+) -> zbus::Result<impl Stream<Item = Option<zbus::Result<(Arc<Vec<String>>, PlayerInfo)>>>> {
     let span = debug_span!("active_player_info");
     async move {
         let stream = active_players(&conn)
@@ -22,17 +22,18 @@ pub async fn active_player_info(
                 let conn = conn.clone();
                 async move {
                     match names {
-                        Ok(mut names) => {
+                        Ok(names) => {
                             if names.is_empty() {
                                 info!("no active player");
                                 once(ready(None)).right_stream().right_stream()
                             } else {
-                                let name: &'static str = string_to_static(names.swap_remove(0));
+                                let name: &'static str = string_to_static(names[0].clone());
                                 info!("new active player: {name}");
                                 let info = player_info(name, &conn);
+                                let names = Arc::new(names);
                                 match info.await {
                                     Ok(info) => {
-                                        info.map(move |i| Some(i.map(|i| (name, i)))).right_stream()
+                                        info.map(move |i| Some(i.map(|i| (names.clone(), i)))).right_stream()
                                     }
                                     Err(e) => once(ready(Some(Err(e)))).left_stream(),
                                 }

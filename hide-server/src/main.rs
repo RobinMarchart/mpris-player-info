@@ -1,12 +1,10 @@
 use std::{error::Error, future::pending};
 
 use tracing::{Level, info};
-use tracing_log::LogTracer;
-use tracing_subscriber::{fmt::time::LocalTime, EnvFilter};
+use tracing_subscriber::{EnvFilter,registry, layer::SubscriberExt, util::SubscriberInitExt};
 use zbus::ConnectionBuilder;
 
 use mpris_dbus::proxies::HideServer;
-use time::macros::format_description;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let level = if cfg!(debug_assertions) {
@@ -14,20 +12,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         Level::INFO
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
+    registry().with(tracing_journald::layer()?).with(EnvFilter::builder()
                 .with_default_directive(level.into())
-                .from_env_lossy(),
-        )
-        .event_format(
-            tracing_subscriber::fmt::format()
-                .pretty()
-                .with_timer(LocalTime::new(format_description!(
-                    "[day].[month].[year] [hour]:[minute]:[second]:[subsecond digits:6]"
-                ))),
-        ).init();
-    LogTracer::init()?;
+                .from_env_lossy())
+        .init();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;

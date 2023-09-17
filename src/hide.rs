@@ -75,7 +75,7 @@ pub async fn hidden_active_player_info(
     conn: &Connection,
     default: bool,
 ) -> zbus::Result<
-    impl Stream<Item = Option<Option<Result<(&'static str, PlayerInfo), Arc<zbus::Error>>>>>,
+    impl Stream<Item = Option<Option<Result<(Arc<Vec<String>>, PlayerInfo), Arc<zbus::Error>>>>>,
 > {
     let span = debug_span!("hide_active_player_info");
     async move {

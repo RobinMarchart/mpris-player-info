@@ -1,0 +1,15 @@
+[Unit]
+
+[Socket]
+ListenStream=%t/mpris-player-info/waybar-prev-player.sock
+ListenStream=%t/mpris-player-info/waybar-next-player.sock
+ListenStream=%t/mpris-player-info/waybar-title.sock
+ListenStream=%t/mpris-player-info/waybar-play-pause.sock
+ListenStream=%t/mpris-player-info/waybar-prev.sock
+ListenStream=%t/mpris-player-info/waybar-next.sock
+
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=default.target

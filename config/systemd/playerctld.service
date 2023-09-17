@@ -1,0 +1,8 @@
+
+[Unit]
+Description = Playerctl state daemon
+
+[Service]
+ExecStart=/usr/bin/playerctld
+Type=dbus
+BusName=org.mpris.MediaPlayer2.playerctld

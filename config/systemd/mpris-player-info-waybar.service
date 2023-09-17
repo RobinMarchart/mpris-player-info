@@ -1,0 +1,7 @@
+[Unit]
+
+Requires=mpris-player-info-waybar.service
+
+[Service]
+ExecStart=%h/.cargo/bin/mpris-player-info waybar
+Type=notify

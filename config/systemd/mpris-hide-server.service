@@ -1,0 +1,7 @@
+[Unit]
+Description = State server for bar mpris information
+
+[Service]
+ExecStart=%h/.cargo/bin/mpris-hide-server
+Type=dbus
+BusName=com.github.robinmarchart.mprisutils

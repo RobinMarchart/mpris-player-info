@@ -10,7 +10,13 @@ tokio = { workspace = true, features = ["rt"]}
 mpris-dbus = {path = "..", version = "1.0.0", default-features = false, features = ["hide_active_player_info"]}
 clap = { version = "4.4.2", features = ["derive"] }
 zbus = {workspace = true}
-tracing-log = {workspace = true}
-tracing-subscriber = {workspace = true}
+tracing-subscriber = {workspace = true, features = ["fmt", "ansi", "local-time"]}
 tracing = {workspace = true}
-time = {workspace = true}
+tracing-journald = {workspace = true, optional = true}
+time = {workspace = true, optional = true}
+libsystemd = {version = "0.6.0", optional = true}
+
+[features]
+default = ["polybar_yambar","waybar"]
+polybar_yambar = ["time"]
+waybar = ["tracing-journald", "libsystemd"]

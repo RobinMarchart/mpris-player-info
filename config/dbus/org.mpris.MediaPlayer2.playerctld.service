@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.mpris.MediaPlayer2.playerctld
+SystemdService=playerctld.service
+Exec=playerctld
