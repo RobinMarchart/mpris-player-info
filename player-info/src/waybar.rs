@@ -38,11 +38,11 @@ impl<'a> Info<'a> {
     fn serialize(self) -> String {
         let text = self.text.unwrap_or(Cow::Borrowed(""));
         match (self.tooltip, self.class) {
-            (None, None) => format!("{{text:\"{text}\"}}"),
-            (Some(tooltip), None) => format!("{{text:\"{text}\",tooltip:\"{tooltip}\"}}"),
-            (None, Some(class)) => format!("{{text:\"{text}\",class:\"{class}\"}}"),
+            (None, None) => format!("{{text:\"{text}\"}}\n"),
+            (Some(tooltip), None) => format!("{{text:\"{text}\",tooltip:\"{tooltip}\"}}\n"),
+            (None, Some(class)) => format!("{{text:\"{text}\",class:\"{class}\"}}\n"),
             (Some(tooltip), Some(class)) => {
-                format!("{{text:\"{text}\",class:\"{class}\",tooltip:\"{tooltip}\"}}")
+                format!("{{text:\"{text}\",class:\"{class}\",tooltip:\"{tooltip}\"}}\n")
             }
         }
     }
@@ -92,6 +92,9 @@ impl Output {
             {
                 *stream = None;
                 warn!("Error writing message: {e}")
+            } else if let Err(e) = stream.as_mut().unwrap().flush().await {
+                *stream = None;
+                warn!("Error flushing stream: {e}")
             }
         }
         inner.1.retain(Option::is_some);
@@ -100,15 +103,18 @@ impl Output {
 
     async fn listen(self: Arc<Self>) -> io::Result<()> {
         loop {
-            let (mut stream, _) = self.listener.accept().await?;
+            let (mut stream, addr) = self.listener.accept().await?;
             {
                 let mut inner = self.inner.lock().await;
-                match stream.write_all(inner.0.as_bytes()).await {
-                    Err(e) => {
-                        warn!("Error writing message: {e}")
-                    }
-                    Ok(()) => {
-                        inner.1.push(Some(stream));
+                if let Err(e) = stream.write_all(inner.0.as_bytes()).await {
+                    warn!("Error writing message: {e}")
+                } else if let Err(e) = stream.flush().await {
+                    warn!("Error flushing stream: {e}")
+                } else {
+                    inner.1.push(Some(stream));
+                    match addr.as_pathname(){
+                        Some(path) => info!("new incoming connection on {}",path.display()),
+                        None => info!("new incoming connection on unknown path")
                     }
                 }
             }

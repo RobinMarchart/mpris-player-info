@@ -726,6 +726,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mpris-player-info-waybar-cat"
+version = "0.1.0"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "mpris-toggle-hide"
 version = "0.1.0"
 dependencies = [

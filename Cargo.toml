@@ -29,7 +29,7 @@ active_player_info = ["playerctld", "player_info"]
 hide_active_player_info = ["active_player_info", "hide"]
 
 [workspace]
-members = ["hide-server", "toggle-hide", "player-info"]
+members = ["hide-server", "toggle-hide", "player-info", "player-info-waybar-cat"]
 
 [workspace.dependencies]
 zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
@@ -40,6 +40,7 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 time = { version = "0.3.22", features = ["macros"] }
 tracing-journald = "0.3.0"
 serde = { version = ">=1.0.184", features = ["derive"]}
+clap = { version = "4.4.2", features = ["derive"] }
 
 [package.metadata.cargo-all-features]
 max_combination_size = 1
