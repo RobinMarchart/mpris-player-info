@@ -70,8 +70,15 @@ pub trait StreamExt2: Stream {
         InstrumentedStream { s: self, span }
     }
 
-    fn filter_no_change(self) -> FilterNoChange<Self> where Self:Sized, Self::Item:Clone+PartialEq{
-        FilterNoChange { stream: self, last: None }
+    fn filter_no_change(self) -> FilterNoChange<Self>
+    where
+        Self: Sized,
+        Self::Item: Clone + PartialEq,
+    {
+        FilterNoChange {
+            stream: self,
+            last: None,
+        }
     }
 }
 
@@ -309,20 +316,112 @@ where
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let (stream, last) = unsafe {
+        let (mut stream, last) = unsafe {
             let s = self.get_unchecked_mut();
             (Pin::new_unchecked(&mut s.stream), &mut s.last)
         };
-        match (stream.poll_next(cx), last.as_ref()) {
-            (Ready(Some(v)), Some(cmp)) => {
-                if &v == cmp {
-                    Pending
-                } else {
+        loop {
+            break match (stream.as_mut().poll_next(cx), last.as_ref()) {
+                (Ready(Some(v)), Some(cmp)) => {
+                    if &v == cmp {
+                        continue;
+                    } else {
+                        *last = Some(v.clone());
+                        Ready(Some(v))
+                    }
+                }
+                (Ready(Some(v)), None) => {
                     *last = Some(v.clone());
                     Ready(Some(v))
                 }
-            }
-            (r, _) => r,
+                (Ready(None), _) => {
+                    *last = None;
+                    Ready(None)
+                }
+                (Pending, _) => Pending,
+            };
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{
+        future::{poll_fn, Future},
+        pin::{pin, Pin},
+        task::Poll,
+    };
+
+    use super::StreamExt2;
+    use tokio::sync::mpsc;
+    use tokio_stream::wrappers::ReceiverStream;
+    use zbus::export::futures_util::stream::{self, StreamExt};
+
+    macro_rules! assert_pending {
+        ($f:expr, $s:literal) => {
+            let mut f = $f;
+            poll_fn(|cx| {
+                assert!(
+                    matches!(Future::poll(Pin::as_mut(&mut f), cx), Poll::Pending),
+                    $s
+                );
+                Poll::Ready(())
+            })
+            .await
+        };
+    }
+
+    #[tokio::test]
+    async fn poll_both() {
+        let (in1, stream1) = mpsc::channel::<u8>(4);
+        let (in2, stream2) = mpsc::channel::<i8>(4);
+        let mut s = pin!(super::poll_both(
+            ReceiverStream::new(stream1),
+            ReceiverStream::new(stream2)
+        ));
+        assert_pending!(pin!(s.next()),"both streams empty");
+        in1.send(255).await.unwrap();
+        assert_eq!(Some((Some(255),None)),s.next().await,"streams partially filled");
+        assert_pending!(pin!(s.next()),"already polled");
+        in2.send(-1).await.unwrap();
+        assert_eq!(Some((Some(255),Some(-1))),s.next().await,"streams filled");
+        assert_pending!(pin!(s.next()),"already polled");
+        in1.send(244).await.unwrap();
+        assert_eq!(Some((Some(244),Some(-1))),s.next().await,"value changed 1");
+        assert_pending!(pin!(s.next()),"already polled");
+        in2.send(-2).await.unwrap();
+        assert_eq!(Some((Some(244),Some(-2))),s.next().await,"value changed 2");
+        assert_pending!(pin!(s.next()),"already polled");
+        drop(in1);
+        assert_eq!(None,s.next().await,"stream 1 closed");
+
+
+        let (in1, stream1) = mpsc::channel::<u8>(4);
+        let (in2, stream2) = mpsc::channel::<i8>(4);
+        let mut s = pin!(super::poll_both(
+            ReceiverStream::new(stream1),
+            ReceiverStream::new(stream2)
+        ));
+
+        assert_pending!(pin!(s.next()),"both streams empty");
+        in2.send(-1).await.unwrap();
+        assert_eq!(Some((None,Some(-1))),s.next().await,"streams partially filled");
+        assert_pending!(pin!(s.next()),"already polled");
+        in1.send(255).await.unwrap();
+        assert_eq!(Some((Some(255),Some(-1))),s.next().await,"streams filled");
+        assert_pending!(pin!(s.next()),"already polled");
+        drop(in2);
+        assert_eq!(None,s.next().await,"stream 2 closed");
+    }
+
+    #[tokio::test]
+    async fn filter_no_change() {
+        let mut stream = pin!(stream::iter([1u8, 1]).filter_no_change());
+        assert_eq!(Some(1u8), stream.next().await, "first value missing");
+        assert_eq!(
+            None,
+            stream.next().await,
+            "second value should have been dropped"
+        );
     }
 }

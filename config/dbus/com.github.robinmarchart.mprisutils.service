@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=com.github.robinmarchart.mprisutils
 SystemdService=mpris-hide-server.service
-Exec=/home/robin/.cargo/bin/mpris-helper-state-server
+Exec=/usr/bin/mpris-player-info hide-server

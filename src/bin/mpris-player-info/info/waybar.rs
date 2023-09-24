@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    error::Error,
     future::Future,
     io,
     os::fd::{FromRawFd, IntoRawFd},
@@ -8,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::{anyhow, Context};
 use libsystemd::{
     activation::{receive_descriptors, FileDescriptor},
     daemon::NotifyState,
@@ -101,7 +101,7 @@ impl Output {
         inner.0 = message;
     }
 
-    async fn listen(self: Arc<Self>) -> io::Result<()> {
+    async fn listen(self: Arc<Self>) -> anyhow::Result<()> {
         loop {
             let (mut stream, addr) = self.listener.accept().await?;
             {
@@ -112,9 +112,9 @@ impl Output {
                     warn!("Error flushing stream: {e}")
                 } else {
                     inner.1.push(Some(stream));
-                    match addr.as_pathname(){
-                        Some(path) => info!("new incoming connection on {}",path.display()),
-                        None => info!("new incoming connection on unknown path")
+                    match addr.as_pathname() {
+                        Some(path) => info!("new incoming connection on {}", path.display()),
+                        None => info!("new incoming connection on unknown path"),
                     }
                 }
             }
@@ -122,11 +122,11 @@ impl Output {
     }
 }
 
-async fn flatten<F, T, E1, E2>(handle: F) -> Result<T, Box<dyn Error>>
+async fn flatten<F, T, E1, E2>(handle: F) -> anyhow::Result<T>
 where
     F: Future<Output = Result<Result<T, E2>, E1>>,
-    E1: Into<Box<dyn Error>>,
-    E2: Into<Box<dyn Error>>,
+    E1: Into<anyhow::Error>,
+    E2: Into<anyhow::Error>,
 {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
@@ -141,10 +141,10 @@ fn to_listener(fd: FileDescriptor) -> io::Result<UnixListener> {
     UnixListener::from_std(listener)
 }
 
-pub async fn waybar(hide: bool) -> Result<(), Box<dyn Error>> {
-    let mut sockets = receive_descriptors(false)?;
+pub async fn waybar(hide: bool) -> anyhow::Result<()> {
+    let mut sockets = receive_descriptors(false).context("receiving sockets from systemd")?;
     if 6 != sockets.len() {
-        Err(format!(
+        Err(anyhow!(
             "mismatched number of sockets: expected 6 but actual {}",
             sockets.len()
         ))?;
@@ -290,7 +290,8 @@ pub async fn waybar(hide: bool) -> Result<(), Box<dyn Error>> {
                 );
             }
         })
-        .map(|e| e.map_err(Box::<dyn Error>::from))
+        .map(|e| e.map_err(anyhow::Error::from))
     )?;
+
     Ok(())
 }

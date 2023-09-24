@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::Info;
+use super::Info;
 
 struct YambarInfo<'a> {
     show: bool,
